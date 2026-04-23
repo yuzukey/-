@@ -1,24 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { parseMultipleEvents } from "@/lib/parser";
+import { parseAuto } from "@/lib/parser";
 import {
   generateGoogleCalendarUrl,
+  generateICS,
   encodeEvent,
   formatDateJa,
   formatTimeRange,
   type CalendarEvent,
 } from "@/lib/calendar";
 
-const PLACEHOLDER = `例：
+const PLACEHOLDER = `例①（スケジュール一覧形式）:
+5月 企画スケジュール
+06 20:00 ワイン会
+12 20:00 ワイン会
+19 19:30 パーティー
+6/1 20:00 ワイン会
+
+例②（イベント詳細形式）:
 チームミーティング
 日時：2026年5月10日 14:00〜15:00
 場所：会議室A
-詳細：月次定例
-
-懇親会
-日時：5月15日 18:30〜21:00
-場所：渋谷 〇〇レストラン`;
+詳細：月次定例`;
 
 export default function PasteParser() {
   const [text, setText] = useState("");
@@ -27,9 +31,20 @@ export default function PasteParser() {
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
   function handleParse() {
-    const result = parseMultipleEvents(text);
+    const result = parseAuto(text);
     setEvents(result);
     setParsed(true);
+  }
+
+  function handleDownloadICS() {
+    const content = generateICS(events);
+    const blob = new Blob([content], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "events.ics";
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   function handleCopyShareLink(event: CalendarEvent, idx: number) {
@@ -79,6 +94,22 @@ export default function PasteParser() {
           <p className="text-sm font-semibold text-slate-600">
             {events.length}件の予定を読み込みました
           </p>
+
+          {events.length >= 2 && (
+            <div className="space-y-2">
+              <button
+                onClick={handleDownloadICS}
+                className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg py-2.5 text-sm transition-colors"
+              >
+                <CalendarDownloadIcon />
+                全{events.length}件を一括ダウンロード (.ics)
+              </button>
+              <p className="text-xs text-slate-400 text-center">
+                ダウンロード後、Googleカレンダー →「設定」→「インポート」から一括追加できます
+              </p>
+            </div>
+          )}
+
           {events.map((ev, i) => (
             <EventCard
               key={i}
@@ -171,6 +202,16 @@ function GoogleCalIcon() {
     <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" aria-hidden>
       <rect x="3" y="4" width="18" height="17" rx="2" stroke="currentColor" strokeWidth="1.5" />
       <path d="M16 2v4M8 2v4M3 10h18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CalendarDownloadIcon() {
+  return (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="3" y="4" width="18" height="17" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M16 2v4M8 2v4M3 10h18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M12 13v5m0 0l-2-2m2 2l2-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

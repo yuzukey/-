@@ -51,3 +51,50 @@ export function formatTimeRange(start: string, end: string): string {
   if (!start) return "";
   return end ? `${start} 〜 ${end}` : start;
 }
+
+// ---- ICS (iCalendar) export for bulk import ----
+
+function escapeICS(text: string): string {
+  return text
+    .replace(/\\/g, "\\\\")
+    .replace(/[,;]/g, "\\$&")
+    .replace(/\n/g, "\\n");
+}
+
+function addOneHour(date: string, time: string): string {
+  const [h, m] = (time || "00:00").split(":").map(Number);
+  const newH = (h + 1) % 24;
+  return toGCalDateTime(date, `${String(newH).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+}
+
+export function generateICS(events: CalendarEvent[]): string {
+  const lines: string[] = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Event Calendar Sharing//JA",
+    "CALSCALE:GREGORIAN",
+  ];
+
+  for (const ev of events) {
+    const start = toGCalDateTime(ev.startDate, ev.startTime);
+    const end = ev.endTime
+      ? toGCalDateTime(ev.endDate || ev.startDate, ev.endTime)
+      : addOneHour(ev.endDate || ev.startDate, ev.startTime);
+
+    lines.push(
+      "BEGIN:VEVENT",
+      `DTSTART:${start}`,
+      `DTEND:${end}`,
+      `SUMMARY:${escapeICS(ev.title)}`,
+    );
+    if (ev.location) lines.push(`LOCATION:${escapeICS(ev.location)}`);
+    if (ev.description) lines.push(`DESCRIPTION:${escapeICS(ev.description)}`);
+    lines.push(
+      `UID:${start}-${Math.random().toString(36).slice(2)}@event-cal`,
+      "END:VEVENT",
+    );
+  }
+
+  lines.push("END:VCALENDAR");
+  return lines.join("\r\n");
+}

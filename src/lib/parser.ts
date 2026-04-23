@@ -2,6 +2,113 @@ import type { CalendarEvent } from "./calendar";
 
 const THIS_YEAR = new Date().getFullYear();
 
+// ---- Schedule-list parser (DD HH:MM タイトル per-line format) ----
+
+function stripLeadingMarkers(line: string): string {
+  // Remove 🆕, ⚠️ and whitespace from the start
+  return line.replace(/^[\s\u{1F195}\u{26A0}️]+/u, "").trim();
+}
+
+export function parseScheduleList(text: string): CalendarEvent[] {
+  const lines = text.split("\n");
+  const events: CalendarEvent[] = [];
+  let month = new Date().getMonth() + 1;
+  let section = "";
+  let subSection = "";
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const cleaned = stripLeadingMarkers(line);
+
+    // M/D HH:MM pattern — cross-month reference like "6/1 20:00 ワイン会"
+    {
+      const m = cleaned.match(
+        /^(\d{1,2})\/(\d{1,2})\s+(\d{1,2})\s*[：:]\s*(\d{2})-?\s*(.*)/
+      );
+      if (m) {
+        const rawTitle = m[5].replace(/[⚠️\s]+$/, "").trim();
+        const fullSection = subSection ? `${section} (${subSection})` : section;
+        const date = `${THIS_YEAR}-${pad(+m[1])}-${pad(+m[2])}`;
+        events.push({
+          title: rawTitle || fullSection || "（タイトルなし）",
+          startDate: date,
+          startTime: `${pad(+m[3])}:${m[4]}`,
+          endDate: date,
+          endTime: "",
+          location: "",
+          description: "",
+        });
+        continue;
+      }
+    }
+
+    // DD HH:MM pattern — like "06 20:00 ワイン会", "🆕05  19:30 サリさん", "14 20 :00 ワイン会"
+    {
+      const m = cleaned.match(
+        /^(\d{1,2})\s+(\d{1,2})\s*[：:]\s*(\d{2})-?\s*(.*)/
+      );
+      if (m && +m[1] >= 1 && +m[1] <= 31) {
+        const rawTitle = m[4].replace(/[⚠️\s]+$/, "").trim();
+        const fullSection = subSection ? `${section} (${subSection})` : section;
+        const date = `${THIS_YEAR}-${pad(month)}-${pad(+m[1])}`;
+        events.push({
+          title: rawTitle || fullSection || "（タイトルなし）",
+          startDate: date,
+          startTime: `${pad(+m[2])}:${m[3]}`,
+          endDate: date,
+          endTime: "",
+          location: "",
+          description: "",
+        });
+        continue;
+      }
+    }
+
+    // Non-event line: update month and section context
+    const monthM = line.match(/(\d{1,2})月/);
+    if (monthM) month = +monthM[1];
+
+    // Sub-section markers like (a), (b)
+    if (/^[（(][a-zA-Z][）)]$/.test(line)) {
+      subSection = line.replace(/[（(）)]/g, "");
+    } else {
+      const sectionText = cleaned
+        .replace(/[\d月、，。！？!?,.\s]+/g, " ")
+        .trim();
+      if (sectionText.length > 1) {
+        section = sectionText;
+        subSection = "";
+      }
+    }
+  }
+
+  return events;
+}
+
+// Heuristic: 3+ lines look like "DD HH:MM" → schedule-list format
+export function looksLikeScheduleList(text: string): boolean {
+  let count = 0;
+  for (const line of text.split("\n")) {
+    const cleaned = stripLeadingMarkers(line.trim());
+    if (
+      /^\d{1,2}\s+\d{1,2}\s*[：:]\s*\d{2}/.test(cleaned) ||
+      /^\d{1,2}\/\d{1,2}\s+\d{1,2}\s*[：:]\s*\d{2}/.test(cleaned)
+    ) {
+      if (++count >= 3) return true;
+    }
+  }
+  return false;
+}
+
+// Auto-detect format and parse
+export function parseAuto(text: string): CalendarEvent[] {
+  return looksLikeScheduleList(text)
+    ? parseScheduleList(text)
+    : parseMultipleEvents(text);
+}
+
 function pad(n: number): string {
   return n.toString().padStart(2, "0");
 }
