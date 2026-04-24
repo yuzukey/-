@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useEffect } from "react";
 
-const MODEL_URL = "/models";
+const MODEL_URL =
+  "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights";
 
 type Status =
   | "loading-models"
@@ -270,8 +271,7 @@ export default function VideoFaceSwap() {
       try {
         const faceapi = await import("face-api.js").then(m => m.default ?? m);
         const urls = [
-          "/models",
-          "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights",
+          "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights",
         ];
         let loaded = false;
         let lastErr: unknown;
