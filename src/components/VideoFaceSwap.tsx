@@ -269,13 +269,29 @@ export default function VideoFaceSwap() {
     (async () => {
       try {
         const faceapi = (await import("face-api.js")).default;
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-        ]);
+        const urls = [
+          "/models",
+          "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights",
+        ];
+        let loaded = false;
+        let lastErr: unknown;
+        for (const url of urls) {
+          try {
+            await Promise.all([
+              faceapi.nets.tinyFaceDetector.loadFromUri(url),
+              faceapi.nets.faceLandmark68Net.loadFromUri(url),
+            ]);
+            loaded = true;
+            break;
+          } catch (e) {
+            lastErr = e;
+          }
+        }
+        if (!loaded) throw lastErr;
         setStatus("idle");
-      } catch {
-        setError("AIモデルの読み込みに失敗しました。ネットワーク接続を確認してください。");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(`AIモデルの読み込みに失敗しました。(${msg})`);
         setStatus("error");
       }
     })();
