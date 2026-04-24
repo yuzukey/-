@@ -114,7 +114,7 @@ async function processMediaRecorder(
   src: SourceFace,
   onProgress: (p: number) => void
 ): Promise<{ url: string; ext: string }> {
-  const faceapi = (await import("face-api.js")).default;
+  const faceapi = await import("face-api.js").then(m => m.default ?? m);
   const videoUrl = URL.createObjectURL(videoFile);
   const video = document.createElement("video");
   video.src = videoUrl; video.muted = true; video.playsInline = true;
@@ -170,7 +170,7 @@ async function processWebCodecs(
   src: SourceFace,
   onProgress: (p: number) => void
 ): Promise<{ url: string; ext: string }> {
-  const faceapi = (await import("face-api.js")).default;
+  const faceapi = await import("face-api.js").then(m => m.default ?? m);
   const { Muxer, ArrayBufferTarget } = await import("mp4-muxer");
 
   const videoUrl = URL.createObjectURL(videoFile);
@@ -268,7 +268,7 @@ export default function VideoFaceSwap() {
     setEngine(detectEngine());
     (async () => {
       try {
-        const faceapi = (await import("face-api.js")).default;
+        const faceapi = await import("face-api.js").then(m => m.default ?? m);
         const urls = [
           "/models",
           "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights",
@@ -310,7 +310,7 @@ export default function VideoFaceSwap() {
       img.src = url;
       await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; });
 
-      const faceapi = (await import("face-api.js")).default;
+      const faceapi = await import("face-api.js").then(m => m.default ?? m);
       const det = await faceapi
         .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
         .withFaceLandmarks();
