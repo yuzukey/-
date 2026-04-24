@@ -91,39 +91,27 @@ function applyColorShift(
   ctx.putImageData(img, cx, cy);
 }
 
-function createPolygonMask(
-  W: number, H: number,
+function buildFacePath(
+  ctx: CanvasRenderingContext2D,
   landmarks: {
     getJawOutline: () => Array<{ x: number; y: number }>;
     getLeftEyeBrow: () => Array<{ x: number; y: number }>;
     getRightEyeBrow: () => Array<{ x: number; y: number }>;
   }
-): HTMLCanvasElement {
-  const mask = document.createElement("canvas");
-  mask.width = W; mask.height = H;
-  const ctx = mask.getContext("2d")!;
-
+) {
   const jaw = landmarks.getJawOutline();
   const lBrow = landmarks.getLeftEyeBrow();
   const rBrow = landmarks.getRightEyeBrow();
-
   const browY = Math.min(...lBrow.map(p => p.y), ...rBrow.map(p => p.y));
   const chinY = jaw[8].y;
-  const blurR = Math.max(8, (chinY - browY) * 0.07);
   const foreheadY = browY - (chinY - browY) * 0.45;
 
-  ctx.shadowColor = "white";
-  ctx.shadowBlur = blurR;
-  ctx.fillStyle = "white";
   ctx.beginPath();
   ctx.moveTo(jaw[0].x, jaw[0].y);
   jaw.forEach(p => ctx.lineTo(p.x, p.y));
   ctx.lineTo(rBrow[rBrow.length - 1].x, foreheadY);
   ctx.lineTo(lBrow[0].x, foreheadY);
   ctx.closePath();
-  ctx.fill();
-
-  return mask;
 }
 
 function drawSwappedFace(
@@ -138,36 +126,34 @@ function drawSwappedFace(
   box: { x: number; y: number; width: number; height: number }
 ) {
   const scale = tgt.eyeDistance / src.transform.eyeDistance;
+  if (!isFinite(scale) || scale <= 0 || scale > 20) return;
   const rot = tgt.angle - src.transform.angle;
-  const W = ctx.canvas.width, H = ctx.canvas.height;
 
-  // Draw transformed source face onto temp canvas
-  const tmp = document.createElement("canvas");
-  tmp.width = W; tmp.height = H;
-  const tmpCtx = tmp.getContext("2d")!;
-  tmpCtx.save();
-  tmpCtx.translate(tgt.center.x, tgt.center.y);
-  tmpCtx.rotate(rot);
-  tmpCtx.scale(scale, scale);
-  tmpCtx.translate(-src.transform.center.x, -src.transform.center.y);
-  tmpCtx.drawImage(src.img, 0, 0);
-  tmpCtx.restore();
-
-  // Color correction: match source face color to target face color
+  // Sample target color BEFORE drawing (for color correction)
   const tgtAvg = sampleAvgColor(ctx, box.x, box.y, box.width, box.height);
   const shift = {
     r: tgtAvg.r - src.avgColor.r,
     g: tgtAvg.g - src.avgColor.g,
     b: tgtAvg.b - src.avgColor.b,
   };
-  applyColorShift(tmpCtx, box.x, box.y, box.width, box.height, shift);
 
-  // Apply face polygon mask (soft edges)
-  const mask = createPolygonMask(W, H, tgtLandmarks);
-  tmpCtx.globalCompositeOperation = "destination-in";
-  tmpCtx.drawImage(mask, 0, 0);
+  ctx.save();
 
-  ctx.drawImage(tmp, 0, 0);
+  // Clip to face polygon (jaw outline + forehead)
+  buildFacePath(ctx, tgtLandmarks);
+  ctx.clip();
+
+  // Draw transformed source face inside the clip
+  ctx.translate(tgt.center.x, tgt.center.y);
+  ctx.rotate(rot);
+  ctx.scale(scale, scale);
+  ctx.translate(-src.transform.center.x, -src.transform.center.y);
+  ctx.drawImage(src.img, 0, 0);
+
+  ctx.restore();
+
+  // Apply color correction to face bounding box
+  applyColorShift(ctx, box.x, box.y, box.width, box.height, shift);
 }
 
 async function seekTo(video: HTMLVideoElement, time: number): Promise<void> {
