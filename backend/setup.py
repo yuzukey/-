@@ -28,9 +28,18 @@ def fail(msg: str):
 # ── Python バージョン確認 ─────────────────────────────────────────────────────
 
 step("Python バージョン確認")
-if sys.version_info < (3, 8):
-    fail("Python 3.8 以上が必要です")
-ok(f"Python {sys.version_info.major}.{sys.version_info.minor}")
+major, minor = sys.version_info.major, sys.version_info.minor
+if major != 3 or minor < 9 or minor > 12:
+    print(f"  現在のバージョン: Python {major}.{minor}")
+    print()
+    print("  insightface は Python 3.9〜3.12 のみ対応しています。")
+    print("  python.org から Python 3.11 をインストールし、")
+    print("  次のコマンドで再実行してください:")
+    print()
+    print("      py -3.11 setup.py")
+    print()
+    sys.exit(1)
+ok(f"Python {major}.{minor}")
 
 # ── 依存パッケージのインストール ───────────────────────────────────────────────
 
