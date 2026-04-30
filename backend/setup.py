@@ -58,31 +58,51 @@ if MODEL_FILE.exists() and MODEL_FILE.stat().st_size >= MIN_SIZE:
 else:
     print("  モデルをダウンロードします（約500MB）...")
 
-    # InsightFace のデフォルトダウンロード先を確認
     downloaded = False
-    try:
-        import insightface
-        model = insightface.model_zoo.get_model("inswapper_128.onnx")
-        # デフォルト保存先を探す
-        candidates = [
-            Path.home() / ".insightface" / "models" / "inswapper_128.onnx",
-            Path.home() / ".insightface" / "models" / "inswapper_128" / "inswapper_128.onnx",
-        ]
-        for c in candidates:
-            if c.exists() and c.stat().st_size >= MIN_SIZE:
-                shutil.copy(c, MODEL_FILE)
-                ok(f"モデルをコピーしました: {MODEL_FILE}")
+
+    # 既存のキャッシュを確認
+    candidates = [
+        Path.home() / ".insightface" / "models" / "inswapper_128.onnx",
+        Path.home() / ".insightface" / "models" / "inswapper_128" / "inswapper_128.onnx",
+    ]
+    for c in candidates:
+        if c.exists() and c.stat().st_size >= MIN_SIZE:
+            shutil.copy(c, MODEL_FILE)
+            ok(f"モデルをコピーしました: {MODEL_FILE}")
+            downloaded = True
+            break
+
+    # 直接ダウンロード
+    if not downloaded:
+        import urllib.request
+        URL = "https://huggingface.co/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx"
+        print(f"  ダウンロード元: {URL}")
+        print("  しばらくお待ちください（500MB）...")
+        try:
+            def progress(count, block, total):
+                mb = count * block / 1024 / 1024
+                total_mb = total / 1024 / 1024
+                print(f"\r  {mb:.0f} / {total_mb:.0f} MB", end="", flush=True)
+            urllib.request.urlretrieve(URL, MODEL_FILE, reporthook=progress)
+            print()
+            if MODEL_FILE.stat().st_size >= MIN_SIZE:
+                ok("ダウンロード完了")
                 downloaded = True
-                break
-    except Exception as e:
-        print(f"  自動ダウンロード失敗: {e}")
+            else:
+                MODEL_FILE.unlink(missing_ok=True)
+                print("  ダウンロードしたファイルが小さすぎます")
+        except Exception as e:
+            MODEL_FILE.unlink(missing_ok=True)
+            print(f"\n  ダウンロード失敗: {e}")
 
     if not downloaded:
         print("\n" + "=" * 60)
         print("【手動ダウンロードが必要です】")
         print("")
-        print("以下のいずれかから inswapper_128.onnx をダウンロードし、")
-        print(f"次のフォルダに配置してください:")
+        print("ブラウザで以下のURLを開いてダウンロードしてください:")
+        print("  https://huggingface.co/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx")
+        print("")
+        print("ダウンロード後、以下のフォルダに配置してください:")
         print(f"  {MODEL_FILE}")
         print("")
         print("配置後、もう一度 python setup.py を実行してください。")
