@@ -113,10 +113,11 @@ async def swap_faces(
 
         # 複数画像の場合は埋め込みを平均化（精度向上）
         if len(all_embeddings) > 1:
+            from types import SimpleNamespace
             avg = np.mean(all_embeddings, axis=0)
-            ref_face.normed_embedding = avg / np.linalg.norm(avg)
-
-        source_face = ref_face
+            source_face = SimpleNamespace(normed_embedding=avg / np.linalg.norm(avg))
+        else:
+            source_face = ref_face
 
         # 動画処理
         cap = cv2.VideoCapture(video_path)
