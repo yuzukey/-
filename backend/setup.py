@@ -29,14 +29,11 @@ def fail(msg: str):
 
 step("Python バージョン確認")
 major, minor = sys.version_info.major, sys.version_info.minor
-if major != 3 or minor < 9 or minor > 12:
+if major != 3 or minor < 9:
     print(f"  現在のバージョン: Python {major}.{minor}")
     print()
-    print("  insightface は Python 3.9〜3.12 のみ対応しています。")
-    print("  python.org から Python 3.11 をインストールし、")
-    print("  次のコマンドで再実行してください:")
-    print()
-    print("      py -3.11 setup.py")
+    print("  Python 3.9 以上が必要です。")
+    print("  python.org から Python 3.11 をインストールしてください。")
     print()
     sys.exit(1)
 ok(f"Python {major}.{minor}")
