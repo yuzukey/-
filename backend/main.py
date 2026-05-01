@@ -51,6 +51,28 @@ def load_models():
     return _face_analyser, _swapper
 
 
+def _seamless_blend(original: np.ndarray, swapped: np.ndarray, face) -> np.ndarray:
+    """顔領域をシームレスクローンで自然にブレンドする。"""
+    fh, fw = original.shape[:2]
+    bbox = face.bbox.astype(int)
+    x1 = max(5, min(fw - 6, bbox[0]))
+    y1 = max(5, min(fh - 6, bbox[1]))
+    x2 = max(5, min(fw - 6, bbox[2]))
+    y2 = max(5, min(fh - 6, bbox[3]))
+    if x2 <= x1 or y2 <= y1:
+        return swapped
+    cx = (x1 + x2) // 2
+    cy = (y1 + y2) // 2
+    rx = max(1, int((x2 - x1) // 2 * 0.85))
+    ry = max(1, int((y2 - y1) // 2 * 0.92))
+    mask = np.zeros((fh, fw), dtype=np.uint8)
+    cv2.ellipse(mask, (cx, cy), (rx, ry), 0, 0, 360, 255, -1)
+    try:
+        return cv2.seamlessClone(swapped, original, mask, (cx, cy), cv2.NORMAL_CLONE)
+    except Exception:
+        return swapped
+
+
 # ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Face Swap API")
@@ -141,7 +163,9 @@ async def swap_faces(
             faces = face_analyser.get(frame)
             result = frame.copy()
             for tgt in faces:
-                result = swapper.get(result, tgt, source_face, paste_back=True)
+                original = result.copy()
+                swapped = swapper.get(result, tgt, source_face, paste_back=True)
+                result = _seamless_blend(original, swapped, tgt)
             out.write(result)
             n += 1
             if n % 30 == 0:
