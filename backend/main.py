@@ -1,4 +1,5 @@
 import os
+import gc
 import cv2
 import numpy as np
 import tempfile
@@ -10,6 +11,14 @@ from typing import List
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+
+# ── 処理設定 ─────────────────────────────────────────────────────────────────
+# 処理時の最大高さ（ピクセル）。元動画がこれより大きい場合は縮小して処理し、最後に戻す。
+# 小さくするほど高速・低負荷。品質を優先する場合は 1080 に上げる。
+PROC_MAX_HEIGHT = 720
+
+# 顔検出サイズ。(320, 320) が低負荷、(640, 640) が高精度。
+DET_SIZE = (320, 320)
 
 # ── Model paths ───────────────────────────────────────────────────────────────
 
@@ -37,22 +46,32 @@ def load_models():
             "python setup.py を実行してモデルをダウンロードしてください。"
         )
 
+    # GPU (CUDA) を優先し、なければ CPU にフォールバック
+    providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
     print("顔検出モデル読み込み中...")
-    _face_analyser = FaceAnalysis(
-        name="buffalo_l",
-        providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
-    )
-    _face_analyser.prepare(ctx_id=0, det_size=(640, 640))
+    _face_analyser = FaceAnalysis(name="buffalo_l", providers=providers)
+    _face_analyser.prepare(ctx_id=0, det_size=DET_SIZE)
 
     print("顔変換モデル読み込み中...")
-    _swapper = insightface.model_zoo.get_model(str(INSWAPPER_PATH))
+    _swapper = insightface.model_zoo.get_model(
+        str(INSWAPPER_PATH), providers=providers
+    )
+
+    # 使用中のプロバイダを表示
+    try:
+        import onnxruntime as ort
+        available = ort.get_available_providers()
+        using_gpu = "CUDAExecutionProvider" in available
+        print(f"実行デバイス: {'GPU (CUDA)' if using_gpu else 'CPU'}")
+    except Exception:
+        pass
 
     print("モデル読み込み完了")
     return _face_analyser, _swapper
 
 
 def _seamless_blend(original: np.ndarray, swapped: np.ndarray, face) -> np.ndarray:
-    """顔領域をシームレスクローンで自然にブレンドする。"""
     fh, fw = original.shape[:2]
     bbox = face.bbox.astype(int)
     x1 = max(5, min(fw - 6, bbox[0]))
@@ -133,7 +152,6 @@ async def swap_faces(
         if not all_embeddings:
             raise HTTPException(400, detail="ソース画像から顔を検出できませんでした")
 
-        # 複数画像の場合は埋め込みを平均化（精度向上）
         if len(all_embeddings) > 1:
             from types import SimpleNamespace
             avg = np.mean(all_embeddings, axis=0)
@@ -150,7 +168,12 @@ async def swap_faces(
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        print(f"処理開始: {total}フレーム, {fps:.1f}fps, {w}x{h}")
+
+        # 処理解像度を決定（大きい動画は縮小して処理）
+        scale = min(1.0, PROC_MAX_HEIGHT / h) if h > PROC_MAX_HEIGHT else 1.0
+        proc_w = int(w * scale)
+        proc_h = int(h * scale)
+        print(f"処理開始: {total}フレーム, {fps:.1f}fps, 元{w}x{h} → 処理{proc_w}x{proc_h}")
 
         silent_path = os.path.join(tmp_dir, "silent.mp4")
         out = cv2.VideoWriter(silent_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
@@ -160,16 +183,26 @@ async def swap_faces(
             ret, frame = cap.read()
             if not ret:
                 break
-            faces = face_analyser.get(frame)
-            result = frame.copy()
+
+            # 縮小して処理
+            proc = cv2.resize(frame, (proc_w, proc_h)) if scale < 1.0 else frame
+
+            faces = face_analyser.get(proc)
+            result = proc.copy()
             for tgt in faces:
                 original = result.copy()
                 swapped = swapper.get(result, tgt, source_face, paste_back=True)
                 result = _seamless_blend(original, swapped, tgt)
+
+            # 元サイズに戻して書き込み
+            if scale < 1.0:
+                result = cv2.resize(result, (w, h))
             out.write(result)
+
             n += 1
             if n % 30 == 0:
                 print(f"  {n}/{total} フレーム完了")
+                gc.collect()  # 定期的にメモリ解放
 
         cap.release()
         out.release()
