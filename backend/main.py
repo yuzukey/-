@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import List
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Form, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -121,6 +121,7 @@ async def swap_faces(
     background_tasks: BackgroundTasks,
     sources: List[UploadFile] = File(...),
     video: UploadFile = File(...),
+    max_height: int = Form(720),
 ):
     face_analyser, swapper = load_models()
     tmp_dir = tempfile.mkdtemp()
@@ -170,7 +171,7 @@ async def swap_faces(
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
         # 処理解像度を決定（大きい動画は縮小して処理）
-        scale = min(1.0, PROC_MAX_HEIGHT / h) if h > PROC_MAX_HEIGHT else 1.0
+        scale = min(1.0, max_height / h) if h > max_height else 1.0
         proc_w = int(w * scale)
         proc_h = int(h * scale)
         print(f"処理開始: {total}フレーム, {fps:.1f}fps, 元{w}x{h} → 処理{proc_w}x{proc_h}")

@@ -14,6 +14,7 @@ export default function VideoFaceSwap() {
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [quality, setQuality] = useState<"720" | "1080">("720");
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -61,6 +62,7 @@ export default function VideoFaceSwap() {
       const fd = new FormData();
       sourceFiles.forEach(f => fd.append("sources", f));
       fd.append("video", videoFile);
+      fd.append("max_height", quality);
 
       const res = await fetch(`${BACKEND}/swap`, { method: "POST", body: fd });
 
@@ -78,7 +80,7 @@ export default function VideoFaceSwap() {
     } finally {
       if (timerRef.current) clearInterval(timerRef.current);
     }
-  }, [sourceFiles, videoFile]);
+  }, [sourceFiles, videoFile, quality]);
 
   const canProcess = sourceFiles.length > 0 && !!videoFile && status === "idle";
 
@@ -217,6 +219,31 @@ export default function VideoFaceSwap() {
               <input type="file" accept="video/*" className="hidden"
                 onChange={e => e.target.files?.[0] && setVideoFile(e.target.files[0])} />
             </label>
+          </section>
+
+          {/* Quality selector */}
+          <section className="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+            <h2 className="font-semibold text-gray-200 mb-3 flex items-center gap-2">
+              <Num>3</Num>処理品質
+            </h2>
+            <div className="grid grid-cols-2 gap-3">
+              {(["720", "1080"] as const).map(q => (
+                <button
+                  key={q}
+                  onClick={() => setQuality(q)}
+                  className={`py-3 rounded-xl border text-sm font-semibold transition-all ${
+                    quality === q
+                      ? "bg-violet-600 border-violet-500 text-white"
+                      : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500"
+                  }`}
+                >
+                  <div className="font-bold">{q}p</div>
+                  <div className="text-xs mt-0.5 font-normal opacity-80">
+                    {q === "720" ? "高速・低負荷" : "高品質・時間がかかる"}
+                  </div>
+                </button>
+              ))}
+            </div>
           </section>
 
           {/* Process button */}
