@@ -51,7 +51,7 @@ def load_models():
 
     print("顔検出モデル読み込み中...")
     _face_analyser = FaceAnalysis(name="buffalo_l", providers=providers)
-    _face_analyser.prepare(ctx_id=0, det_size=DET_SIZE)
+    _face_analyser.prepare(ctx_id=0, det_size=DET_SIZE, det_thresh=0.3)
 
     print("顔変換モデル読み込み中...")
     _swapper = insightface.model_zoo.get_model(
