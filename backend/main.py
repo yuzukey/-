@@ -122,6 +122,7 @@ async def swap_faces(
     sources: List[UploadFile] = File(...),
     video: UploadFile = File(...),
     max_height: int = Form(720),
+    output_fps: int = Form(0),
 ):
     face_analyser, swapper = load_models()
     tmp_dir = tempfile.mkdtemp()
@@ -165,25 +166,39 @@ async def swap_faces(
         if not cap.isOpened():
             raise HTTPException(400, detail="動画ファイルを開けませんでした")
 
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        # 出力FPSを決定
+        if output_fps > 0:
+            fps = min(src_fps, float(output_fps))
+        else:
+            fps = src_fps
+        # 元のFPSより出力FPSが低い場合のフレーム間引き比率
+        frame_step = max(1, round(src_fps / fps))
 
         # 処理解像度を決定（大きい動画は縮小して処理）
         scale = min(1.0, max_height / h) if h > max_height else 1.0
         proc_w = int(w * scale)
         proc_h = int(h * scale)
-        print(f"処理開始: {total}フレーム, {fps:.1f}fps, 元{w}x{h} → 処理{proc_w}x{proc_h}")
+        print(f"処理開始: {total}フレーム, {src_fps:.1f}fps→{fps:.1f}fps, 元{w}x{h} → 処理{proc_w}x{proc_h}")
 
         silent_path = os.path.join(tmp_dir, "silent.mp4")
         out = cv2.VideoWriter(silent_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
 
         n = 0
+        frame_idx = 0
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
+
+            # フレーム間引き（30fps出力など）
+            frame_idx += 1
+            if (frame_idx - 1) % frame_step != 0:
+                continue
 
             # 縮小して処理
             proc = cv2.resize(frame, (proc_w, proc_h)) if scale < 1.0 else frame
